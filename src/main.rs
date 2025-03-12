@@ -1,17 +1,16 @@
-use clap::{Parser};
+use clap::Parser;
 use image::png::PNGEncoder;
 use image::ColorType;
 
 use parsers::parse_pair;
-use std::{fs::File};
+use std::fs::File;
 mod mandelbrot;
 mod parsers;
+use std::sync::Mutex;
 
 /// Write the buffer `pixels`, whose dimensions are given by `bounds` to the file name `filename`
 fn write_image(
-    filename: &str,
-    pixels: &[u8],
-    bounds: (usize, usize),
+    filename: &str, pixels: &[u8], bounds: (usize, usize),
 ) -> Result<(), std::io::Error> {
     let output = File::create(filename)?;
 
@@ -31,30 +30,32 @@ struct Arguments {
     output: String,
 
     #[arg(
-        short, 
+        short,
         long,
         allow_hyphen_values = true,
         value_parser = |arg: &str| match parse_pair::<f64>(arg, ',') {
-        Some(v) => Ok(v),
-        None => Err("error parsing center point".to_string())
-    })]
+            Some(v) => Ok(v),
+            None => Err("error parsing center point".to_string())
+        }
+    )]
     center: (f64, f64),
 
     #[arg(
-        short, 
-        long, 
+        short,
+        long,
         default_value = "1920x1080",
         value_parser = |arg: &str| match parse_pair::<usize>(arg, 'x') {
-        Some(v) => Ok(v),
-        None => Err("error parsing image dimensions".to_string())
-    })]
+            Some(v) => Ok(v),
+            None => Err("error parsing image dimensions".to_string())
+        }
+    )]
     dimensions: (usize, usize),
 
     #[arg(short, long)]
     limit: usize,
 
     #[arg(short, long)]
-    invert: bool
+    invert: bool,
 }
 
 fn main() {
@@ -64,31 +65,46 @@ fn main() {
     let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
     let threads = 24;
     let rows_per_band = args.dimensions.1 / threads + 1;
-    let bands: Vec<&mut [u8]> = pixels.chunks_mut(rows_per_band * args.dimensions.0).collect();
+
+    let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
 
     crossbeam::scope(|spawner| {
-        for (i, band) in bands.into_iter().enumerate() {
-            let top = rows_per_band * i;
-            let height = band.len() / args.dimensions.0;
-            let band_bounds = (args.dimensions.0, height);
-            let band_upper_left =
-                mandelbrot::pixel_to_point(args.dimensions, (0, top), upper_left, lower_right);
-            let band_lower_right = mandelbrot::pixel_to_point(
-                args.dimensions,
-                (args.dimensions.0, top + height),
-                upper_left,
-                lower_right,
-            );
+        for _ in 0..threads {
+            spawner.spawn(|_| loop {
+                match {
+                    let mut guard = bands.lock().unwrap();
+                    guard.next()
+                } {
+                    None => {
+                        return;
+                    }
+                    Some((i, band)) => {
+                        let top = rows_per_band * i;
+                        let height = band.len() / args.dimensions.0;
+                        let band_bounds = (args.dimensions.0, height);
+                        let band_upper_left = mandelbrot::pixel_to_point(
+                            args.dimensions,
+                            (0, top),
+                            upper_left,
+                            lower_right,
+                        );
+                        let band_lower_right = mandelbrot::pixel_to_point(
+                            args.dimensions,
+                            (args.dimensions.0, top + height),
+                            upper_left,
+                            lower_right,
+                        );
 
-            spawner.spawn(move |_| {
-                mandelbrot::render(
-                    band,
-                    band_bounds,
-                    band_upper_left,
-                    band_lower_right,
-                    args.limit,
-                    args.invert,
-                )
+                        mandelbrot::render(
+                            band,
+                            band_bounds,
+                            band_upper_left,
+                            band_lower_right,
+                            args.limit,
+                            args.invert,
+                        );
+                    }
+                }
             });
         }
     })
