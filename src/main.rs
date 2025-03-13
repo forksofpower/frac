@@ -63,7 +63,7 @@ fn main() {
     let (upper_left, lower_right) = mandelbrot::calculate_corners(args.zoom, args.center);
 
     let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
-    let threads = 24;
+    let threads = 8;
     let rows_per_band = args.dimensions.1 / threads + 1;
 
     let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
