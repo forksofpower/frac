@@ -15,15 +15,10 @@ use num::Complex;
 ///
 ///  The point on the complex plane that corresponds to the supplied pixel.
 pub fn pixel_to_point(
-    bounds: (usize, usize),
-    pixel: (usize, usize),
-    upper_left: Complex<f64>,
+    bounds: (usize, usize), pixel: (usize, usize), upper_left: Complex<f64>,
     lower_right: Complex<f64>,
 ) -> Complex<f64> {
-    let (width, height) = (
-        lower_right.re - upper_left.re,
-        upper_left.im - lower_right.im,
-    );
+    let (width, height) = (lower_right.re - upper_left.re, upper_left.im - lower_right.im);
 
     // map pixels's x-coordinate to real coordinate and y-coordinate to imaginary coordinate
     Complex {
@@ -94,7 +89,7 @@ pub fn escape_time(c: Complex<f64>, limit: usize) -> Option<usize> {
     let mut z = Complex { re: 0.0, im: 0.0 };
     // Iterate up to the `limit` times
     for i in 0..limit {
-        if z.norm_sqr() > 4.0 {
+        if z.norm_sqr() > 32.0 {
             // Return the number of iterations it took to pass the check.
             return Some(i);
         }
@@ -115,12 +110,8 @@ fn map_ranges(value: usize, from: (usize, usize), to: (usize, usize)) -> usize {
 
 /// Render a rectangle of the Mandelbrot set into a buffer of pixels
 pub fn render(
-    pixels: &mut [u8],
-    bounds: (usize, usize),
-    upper_left: Complex<f64>,
-    lower_right: Complex<f64>,
-    limit: usize,
-    invert: bool,
+    pixels: &mut [u8], bounds: (usize, usize), upper_left: Complex<f64>, lower_right: Complex<f64>,
+    limit: usize, invert: bool,
 ) {
     assert_eq!(pixels.len(), bounds.0 * bounds.1);
 
