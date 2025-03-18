@@ -8,6 +8,8 @@ mod mandelbrot;
 mod parsers;
 use std::sync::Mutex;
 
+extern crate ocl;
+
 /// Write the buffer `pixels`, whose dimensions are given by `bounds` to the file name `filename`
 fn write_image(
     filename: &str, pixels: &[u8], bounds: (usize, usize),
@@ -52,6 +54,9 @@ struct Arguments {
     dimensions: (usize, usize),
 
     #[arg(short, long)]
+    gpu: bool,
+
+    #[arg(short, long)]
     limit: usize,
 
     #[arg(short, long)]
@@ -62,53 +67,59 @@ fn main() {
     let args = Arguments::parse();
     let (upper_left, lower_right) = mandelbrot::calculate_corners(args.zoom, args.center);
 
-    let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
-    let threads = 8;
-    let rows_per_band = args.dimensions.1 / threads + 1;
+    if args.gpu {
+        let output = mandelbrot::gpu_render(8, 8, 256);
+        println!("{:?}", output);
+    } else {
+        let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
+        let threads = 8;
+        let rows_per_band = args.dimensions.1 / threads + 1;
 
-    let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
+        let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
 
-    crossbeam::scope(|spawner| {
-        for _ in 0..threads {
-            spawner.spawn(|_| loop {
-                match {
-                    let mut guard = bands.lock().unwrap();
-                    guard.next()
-                } {
-                    None => {
-                        return;
+        // Spawn workers and have them pull bands to work on until finished.
+        crossbeam::scope(|spawner| {
+            for _ in 0..threads {
+                spawner.spawn(|_| loop {
+                    match {
+                        let mut guard = bands.lock().unwrap();
+                        guard.next()
+                    } {
+                        None => {
+                            return;
+                        }
+                        Some((i, band)) => {
+                            let top = rows_per_band * i;
+                            let height = band.len() / args.dimensions.0;
+                            let band_bounds = (args.dimensions.0, height);
+                            let band_upper_left = mandelbrot::pixel_to_point(
+                                args.dimensions,
+                                (0, top),
+                                upper_left,
+                                lower_right,
+                            );
+                            let band_lower_right = mandelbrot::pixel_to_point(
+                                args.dimensions,
+                                (args.dimensions.0, top + height),
+                                upper_left,
+                                lower_right,
+                            );
+
+                            mandelbrot::render(
+                                band,
+                                band_bounds,
+                                band_upper_left,
+                                band_lower_right,
+                                args.limit,
+                                args.invert,
+                            );
+                        }
                     }
-                    Some((i, band)) => {
-                        let top = rows_per_band * i;
-                        let height = band.len() / args.dimensions.0;
-                        let band_bounds = (args.dimensions.0, height);
-                        let band_upper_left = mandelbrot::pixel_to_point(
-                            args.dimensions,
-                            (0, top),
-                            upper_left,
-                            lower_right,
-                        );
-                        let band_lower_right = mandelbrot::pixel_to_point(
-                            args.dimensions,
-                            (args.dimensions.0, top + height),
-                            upper_left,
-                            lower_right,
-                        );
+                });
+            }
+        })
+        .unwrap();
 
-                        mandelbrot::render(
-                            band,
-                            band_bounds,
-                            band_upper_left,
-                            band_lower_right,
-                            args.limit,
-                            args.invert,
-                        );
-                    }
-                }
-            });
-        }
-    })
-    .unwrap();
-
-    write_image(&args.output, &pixels, args.dimensions).expect("error writing PNG file");
+        write_image(&args.output, &pixels, args.dimensions).expect("error writing PNG file");
+    }
 }
