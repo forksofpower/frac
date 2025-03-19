@@ -11,3 +11,4 @@ image = "0.13.0"
 crossbeam = "0.8"
 colors-transform = "0.2.*"
 clap = { version = "4.1.8", features = ["derive"]}
+ocl = "0.19.4"
