@@ -1,14 +1,25 @@
+mod mandelbrot;
+mod parsers;
+use parsers::parse_pair;
+
+#[macro_use]
+extern crate clap;
+
+#[cfg(feature = "gpu")]
+extern crate ocl;
+
+#[cfg(feature = "gpu")]
+mod gpu;
+
+#[cfg(feature = "gpu")]
+use gpu::gpu_render;
+
 use clap::Parser;
 use image::png::PNGEncoder;
 use image::ColorType;
 
-use parsers::parse_pair;
 use std::fs::File;
-mod mandelbrot;
-mod parsers;
 use std::sync::Mutex;
-
-extern crate ocl;
 
 /// Write the buffer `pixels`, whose dimensions are given by `bounds` to the file name `filename`
 fn write_image(
@@ -62,14 +73,49 @@ struct Arguments {
     #[arg(short, long)]
     invert: bool,
 }
+// fn build_command() -> Command {
+//     let zoom = Arg::new("zoom").short('z').help("zoom level");
+//     let gpu = Arg::new("gpu").num_args(0).help("enable gpu rendering");
+//     let invert = Arg::new("invert").short('i').num_args(0).help("invert color rendering");
+//     let center =
+//         Arg::new("center").short('c').help("center coordinates").value_parser(|arg: &str| {
+//             match parse_pair::<f64>(arg, ',') {
+//                 Some(v) => Ok(v),
+//                 None => Err("error parsing center point".to_string()),
+//             }
+//         });
+//     let dimensions =
+//         Arg::new("dimensions").short('d').help("center coordinates").value_parser(|arg: &str| {
+//             match parse_pair::<usize>(arg, 'x') {
+//                 Some(v) => Ok(v),
+//                 None => Err("error parsing image dimensions".to_string()),
+//             }
+//         });
 
+//     let command = Command::new(crate_name!())
+//         .version(crate_version!())
+//         .author(crate_authors!())
+//         .arg(zoom)
+//         .arg(center)
+//         .arg(dimensions)
+//         .arg(invert)
+//         .limit;
+
+//     #[cfg(feature = "gpu")]
+//     command.arg(gpu);
+
+//     return command;
+// }
 fn main() {
     let args = Arguments::parse();
     let (upper_left, lower_right) = mandelbrot::calculate_corners(args.zoom, args.center);
 
-    if args.gpu {
-        let output = mandelbrot::gpu_render(8, 8, 256);
-        println!("{:?}", output);
+    if cfg!(feature = "gpu") && args.gpu {
+        #[cfg(feature = "gpu")]
+        {
+            let output = gpu_render(8, 8, 256);
+            println!("{:?}", output);
+        }
     } else {
         let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
         let threads = 8;
