@@ -1,8 +1,10 @@
 mod mandelbrot;
+use mandelbrot::Renderer;
+use num::Complex;
 mod parsers;
 use parsers::parse_pair;
 
-#[macro_use]
+// #[macro_use]
 extern crate clap;
 
 #[cfg(feature = "gpu")]
@@ -113,12 +115,16 @@ fn main() {
     if cfg!(feature = "gpu") && args.gpu {
         #[cfg(feature = "gpu")]
         {
-            let output = gpu_render(8, 8, 256);
-            println!("{:?}", output);
+            let img = gpu_render(args.dimensions.0 as u32, args.dimensions.1 as u32, args.limit);
+            let file_prefix = "gpu_";
+            let filename = format!("{}{}", file_prefix, args.output);
+            // write_image(&args.output, &output, arg.dimensions).expect("error writing gpu PNG file");
+            img.save(filename).expect("error writing GPU PNG file");
+            // println!("{:?}", img);
         }
     } else {
         let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
-        let threads = 8;
+        let threads = 16;
         let rows_per_band = args.dimensions.1 / threads + 1;
 
         let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
@@ -151,7 +157,10 @@ fn main() {
                                 lower_right,
                             );
 
-                            mandelbrot::render(
+                            let plotter = mandelbrot::get_plotting_algorithm("escape_time");
+                            let renderer = Renderer::new(plotter);
+
+                            renderer::render(
                                 band,
                                 band_bounds,
                                 band_upper_left,

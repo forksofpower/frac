@@ -1,5 +1,87 @@
-use num::Complex;
+use num::{Complex, complex::ComplexFloat};
 
+trait PlottingAlgorithm {
+    fn calculate(&self, c: Complex<f64>, zoom: usize, limit: usize) -> Option<usize>;
+}
+
+struct EscapeTime;
+impl PlottingAlgorithm for EscapeTime {
+    fn calculate(&self, c: Complex<f64>, _zoom: usize, limit: usize) -> Option<usize> {
+        // Set z = 0 (initial value of z)
+        let mut z = Complex { re: 0.0, im: 0.0 };
+        // Iterate up to the `limit` times
+        for i in 0..limit {
+            if z.norm_sqr() > 32.0 {
+                // Return the number of iterations it took to pass the check.
+                return Some(i);
+            }
+
+            // update `z`
+            z = z * z + c;
+        }
+        // If we have checked `limit` times without success, and z is still valid, return None
+        None
+    }
+}
+
+struct BurningShip;
+impl PlottingAlgorithm for BurningShip {
+    fn calculate(&self, c: Complex<f64>, _zoom: usize, limit: usize) -> Option<usize> {
+        let mut z = Complex::new(0.0, 0.0);
+        let mut iterations = 0;
+
+        while z.norm_sqr() <= 4.0 && iterations < limit {
+            // Note the .abs() calls on the components
+            z = Complex::new(z.im.abs(), z.im.abs()); 
+            z = z * z + c;
+            iterations += 1;
+        }
+        if iterations == limit {
+            None
+        } else {
+            Some(iterations)
+        }
+    }
+}
+
+pub struct Renderer<T: PlottingAlgorithm> {
+    algorithm: T,
+}
+impl<T: PlottingAlgorithm> Renderer<T> {
+    pub fn new(algorithm: T) -> Self {
+        Self { algorithm }
+    }
+    pub fn render(
+        &self, pixels: &mut [u8], bounds: (usize, usize), upper_left: Complex<f64>,
+        lower_right: Complex<f64>, limit: usize, invert: bool,
+    ) {
+        assert_eq!(pixels.len(), bounds.0 * bounds.1);
+        let plotter = get_plotting_algorithm("escape_time");
+        
+
+        for row in 0..bounds.1 {
+            for column in 0..bounds.0 {
+                let point = pixel_to_point(bounds, (column, row), upper_left, lower_right);
+                pixels[row * bounds.0 + column] = match self.algorithm.calculate(point, 1, limit) {
+                    None => 0,
+                    Some(count) => map_ranges(
+                        if invert { limit - count } else { count },
+                        (0, limit),
+                        (0, u8::MAX.into()),
+                    ) as u8,
+                };
+            }
+        }
+    }
+}
+
+pub fn get_plotting_algorithm(name: &str) -> Box<dyn PlottingAlgorithm> {
+    match name {
+        "escape_time" => Box::new(EscapeTime),
+        "burning_ship" => Box::new(BurningShip),
+        _ => Box::new(EscapeTime), // default to EscapeTime if unknown
+    }
+}
 /// Convert the given pixel to a point on the complex plane. The resulting point is the intersection of the line through
 /// the upper left and lower right corners of the complex plane, and the line through the corresponding pixel and the bottom
 /// edge of the image.
