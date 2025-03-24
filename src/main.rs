@@ -44,6 +44,9 @@ struct Arguments {
     #[arg(short, long, default_value = "mandelbrot.png")]
     output: String,
 
+    #[arg(short, long, default_value = "escape_time")]
+    algorithm: String,
+
     #[arg(
         short,
         long,
@@ -157,7 +160,7 @@ fn main() {
                                 lower_right,
                             );
 
-                            let plotter = mandelbrot::get_plotting_algorithm("escape_time");
+                            let plotter = mandelbrot::get_plotting_algorithm(&args.algorithm);
                             let renderer = Renderer::new(plotter);
 
                             renderer::render(

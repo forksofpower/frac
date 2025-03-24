@@ -44,11 +44,11 @@ impl PlottingAlgorithm for BurningShip {
     }
 }
 
-pub struct Renderer<T: PlottingAlgorithm> {
-    algorithm: T,
+pub struct Renderer {
+    algorithm: Box<dyn PlottingAlgorithm + Send + Sync>,
 }
-impl<T: PlottingAlgorithm> Renderer<T> {
-    pub fn new(algorithm: T) -> Self {
+impl Renderer {
+    pub fn new(algorithm: Box<dyn PlottingAlgorithm + Send + Sync>) -> Self {
         Self { algorithm }
     }
     pub fn render(
