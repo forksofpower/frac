@@ -1,10 +1,10 @@
 use num::{Complex, complex::ComplexFloat};
 
-trait PlottingAlgorithm {
+pub trait PlottingAlgorithm {
     fn calculate(&self, c: Complex<f64>, zoom: usize, limit: usize) -> Option<usize>;
 }
 
-struct EscapeTime;
+pub struct EscapeTime;
 impl PlottingAlgorithm for EscapeTime {
     fn calculate(&self, c: Complex<f64>, _zoom: usize, limit: usize) -> Option<usize> {
         // Set z = 0 (initial value of z)
@@ -24,7 +24,7 @@ impl PlottingAlgorithm for EscapeTime {
     }
 }
 
-struct BurningShip;
+pub struct BurningShip;
 impl PlottingAlgorithm for BurningShip {
     fn calculate(&self, c: Complex<f64>, _zoom: usize, limit: usize) -> Option<usize> {
         let mut z = Complex::new(0.0, 0.0);
@@ -44,10 +44,13 @@ impl PlottingAlgorithm for BurningShip {
     }
 }
 
-pub struct Renderer {
+pub struct Canvas {
     algorithm: Box<dyn PlottingAlgorithm + Send + Sync>,
+    // height: usize,
+    // width: usize,
+    // zoom: usize,
 }
-impl Renderer {
+impl Canvas {
     pub fn new(algorithm: Box<dyn PlottingAlgorithm + Send + Sync>) -> Self {
         Self { algorithm }
     }
@@ -56,9 +59,7 @@ impl Renderer {
         lower_right: Complex<f64>, limit: usize, invert: bool,
     ) {
         assert_eq!(pixels.len(), bounds.0 * bounds.1);
-        let plotter = get_plotting_algorithm("escape_time");
-        
-
+    
         for row in 0..bounds.1 {
             for column in 0..bounds.0 {
                 let point = pixel_to_point(bounds, (column, row), upper_left, lower_right);
@@ -75,7 +76,7 @@ impl Renderer {
     }
 }
 
-pub fn get_plotting_algorithm(name: &str) -> Box<dyn PlottingAlgorithm> {
+pub fn get_plotting_algorithm(name: &str) -> Box<dyn PlottingAlgorithm + Send + Sync> {
     match name {
         "escape_time" => Box::new(EscapeTime),
         "burning_ship" => Box::new(BurningShip),
@@ -166,22 +167,22 @@ pub fn calculate_corners(magnitude: f64, center: (f64, f64)) -> (Complex<f64>, C
 /// let c = Complex::new(-0.4, 0.6); // define imaginary input values
 /// assert_eq!(escape_time(c, 200), Some(22)); // checks if the return value matches expected value after conducting 200 iterations
 /// ```
-pub fn escape_time(c: Complex<f64>, limit: usize) -> Option<usize> {
-    // Set z = 0 (initial value of z)
-    let mut z = Complex { re: 0.0, im: 0.0 };
-    // Iterate up to the `limit` times
-    for i in 0..limit {
-        if z.norm_sqr() > 32.0 {
-            // Return the number of iterations it took to pass the check.
-            return Some(i);
-        }
+// pub fn escape_time(c: Complex<f64>, limit: usize) -> Option<usize> {
+//     // Set z = 0 (initial value of z)
+//     let mut z = Complex { re: 0.0, im: 0.0 };
+//     // Iterate up to the `limit` times
+//     for i in 0..limit {
+//         if z.norm_sqr() > 32.0 {
+//             // Return the number of iterations it took to pass the check.
+//             return Some(i);
+//         }
 
-        // update `z`
-        z = z * z + c;
-    }
-    // If we have checked `limit` times without success, and z is still valid, return None
-    None
-}
+//         // update `z`
+//         z = z * z + c;
+//     }
+//     // If we have checked `limit` times without success, and z is still valid, return None
+//     None
+// }
 
 /// Map value in range to cooresponding value in another range
 fn map_ranges(value: usize, from: (usize, usize), to: (usize, usize)) -> usize {
@@ -191,26 +192,26 @@ fn map_ranges(value: usize, from: (usize, usize), to: (usize, usize)) -> usize {
 }
 
 /// Render a rectangle of the Mandelbrot set into a buffer of pixels
-pub fn render(
-    pixels: &mut [u8], bounds: (usize, usize), upper_left: Complex<f64>, lower_right: Complex<f64>,
-    limit: usize, invert: bool,
-) {
-    assert_eq!(pixels.len(), bounds.0 * bounds.1);
+// pub fn render(
+//     pixels: &mut [u8], bounds: (usize, usize), upper_left: Complex<f64>, lower_right: Complex<f64>,
+//     limit: usize, invert: bool,
+// ) {
+//     assert_eq!(pixels.len(), bounds.0 * bounds.1);
 
-    for row in 0..bounds.1 {
-        for column in 0..bounds.0 {
-            let point = pixel_to_point(bounds, (column, row), upper_left, lower_right);
-            pixels[row * bounds.0 + column] = match escape_time(point, limit) {
-                None => 0,
-                Some(count) => map_ranges(
-                    if invert { limit - count } else { count },
-                    (0, limit),
-                    (0, u8::MAX.into()),
-                ) as u8,
-            };
-        }
-    }
-}
+//     for row in 0..bounds.1 {
+//         for column in 0..bounds.0 {
+//             let point = pixel_to_point(bounds, (column, row), upper_left, lower_right);
+//             pixels[row * bounds.0 + column] = match escape_time(point, limit) {
+//                 None => 0,
+//                 Some(count) => map_ranges(
+//                     if invert { limit - count } else { count },
+//                     (0, limit),
+//                     (0, u8::MAX.into()),
+//                 ) as u8,
+//             };
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
@@ -281,31 +282,31 @@ mod tests {
     #[test]
     fn test_escape_time_zero() {
         let c = Complex::new(0.0, 0.0);
-        assert_eq!(escape_time(c, 10), None);
+        assert_eq!(EscapeTime.calculate(c, 100,10), None);
     }
 
     #[test]
     fn test_escape_time_constant_c() {
         let c = Complex::new(1.0, 2.0);
-        assert_eq!(escape_time(c, 100), Some(1));
+        assert_eq!(EscapeTime.calculate(c, 0, 100), Some(1));
     }
 
     #[test]
     fn test_escape_time_periodic_c() {
         let c = Complex::new(-0.4, 0.6);
-        assert_eq!(escape_time(c, 1000), Some(26));
+        assert_eq!(EscapeTime.calculate(c, 0, 1000), Some(26));
     }
 
     #[test]
     fn test_escape_time_outside_main_cardioid() {
         let c = Complex::new(-1.75, -0.02);
-        assert_eq!(escape_time(c, 1000), Some(13));
+        assert_eq!(EscapeTime.calculate(c, 0, 1000), Some(13));
     }
 
     #[test]
     fn test_escape_time_outside_period_2_bulb() {
         let c = Complex::new(0.32, -0.04);
-        assert_eq!(escape_time(c, 1000), None);
+        assert_eq!(EscapeTime.calculate(c, 0, 1000), None);
     }
 
     #[test]

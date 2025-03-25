@@ -1,5 +1,6 @@
 mod mandelbrot;
-use mandelbrot::Renderer;
+use clap::builder::PossibleValuesParser;
+use mandelbrot::Canvas;
 use num::Complex;
 mod parsers;
 use parsers::parse_pair;
@@ -44,7 +45,12 @@ struct Arguments {
     #[arg(short, long, default_value = "mandelbrot.png")]
     output: String,
 
-    #[arg(short, long, default_value = "escape_time")]
+    #[arg(
+        short, 
+        long, 
+        default_value = "escape_time",
+        value_parser = PossibleValuesParser::new(["escape_time", "burning_ship"])
+    )]
     algorithm: String,
 
     #[arg(
@@ -161,9 +167,9 @@ fn main() {
                             );
 
                             let plotter = mandelbrot::get_plotting_algorithm(&args.algorithm);
-                            let renderer = Renderer::new(plotter);
+                            let canvas = Canvas::new(plotter);
 
-                            renderer::render(
+                            canvas.render(
                                 band,
                                 band_bounds,
                                 band_upper_left,
