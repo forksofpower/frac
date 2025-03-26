@@ -325,10 +325,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "colors-transform",
- "crossbeam",
  "image",
  "num",
  "ocl",
+ "rayon",
 ]
 
 [[package]]

@@ -1,7 +1,6 @@
 mod mandelbrot;
 use clap::builder::PossibleValuesParser;
 use mandelbrot::Canvas;
-use num::Complex;
 mod parsers;
 use parsers::parse_pair;
 
@@ -22,7 +21,7 @@ use image::png::PNGEncoder;
 use image::ColorType;
 
 use std::fs::File;
-use std::sync::Mutex;
+use rayon::prelude::*;
 
 /// Write the buffer `pixels`, whose dimensions are given by `bounds` to the file name `filename`
 fn write_image(
@@ -84,39 +83,7 @@ struct Arguments {
     #[arg(short, long)]
     invert: bool,
 }
-// fn build_command() -> Command {
-//     let zoom = Arg::new("zoom").short('z').help("zoom level");
-//     let gpu = Arg::new("gpu").num_args(0).help("enable gpu rendering");
-//     let invert = Arg::new("invert").short('i').num_args(0).help("invert color rendering");
-//     let center =
-//         Arg::new("center").short('c').help("center coordinates").value_parser(|arg: &str| {
-//             match parse_pair::<f64>(arg, ',') {
-//                 Some(v) => Ok(v),
-//                 None => Err("error parsing center point".to_string()),
-//             }
-//         });
-//     let dimensions =
-//         Arg::new("dimensions").short('d').help("center coordinates").value_parser(|arg: &str| {
-//             match parse_pair::<usize>(arg, 'x') {
-//                 Some(v) => Ok(v),
-//                 None => Err("error parsing image dimensions".to_string()),
-//             }
-//         });
 
-//     let command = Command::new(crate_name!())
-//         .version(crate_version!())
-//         .author(crate_authors!())
-//         .arg(zoom)
-//         .arg(center)
-//         .arg(dimensions)
-//         .arg(invert)
-//         .limit;
-
-//     #[cfg(feature = "gpu")]
-//     command.arg(gpu);
-
-//     return command;
-// }
 fn main() {
     let args = Arguments::parse();
     let (upper_left, lower_right) = mandelbrot::calculate_corners(args.zoom, args.center);
@@ -133,56 +100,89 @@ fn main() {
         }
     } else {
         let mut pixels = vec![0; args.dimensions.0 * args.dimensions.1];
-        let threads = 16;
-        let rows_per_band = args.dimensions.1 / threads + 1;
+        let plotter = mandelbrot::get_plotting_algorithm(&args.algorithm);
+        let canvas = Canvas::new(plotter);
+        
+        let bands: Vec<(usize, &mut [u8])> = pixels
+            .chunks_mut(args.dimensions.0)
+            .enumerate()
+            .collect();
 
-        let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
+        bands.into_par_iter().for_each(|(i, band)| {
+            let top = i;
+            let band_bounds = (args.dimensions.0, 1);
+            let band_upper_left = mandelbrot::pixel_to_point(
+                args.dimensions,
+                (0, top),
+                upper_left,
+                lower_right,
+            );
+            let band_lower_right = mandelbrot::pixel_to_point(
+                args.dimensions,
+                (args.dimensions.0, top + 1),
+                upper_left,
+                lower_right,
+            );
 
-        // Spawn workers and have them pull bands to work on until finished.
-        crossbeam::scope(|spawner| {
-            for _ in 0..threads {
-                spawner.spawn(|_| loop {
-                    match {
-                        let mut guard = bands.lock().unwrap();
-                        guard.next()
-                    } {
-                        None => {
-                            return;
-                        }
-                        Some((i, band)) => {
-                            let top = rows_per_band * i;
-                            let height = band.len() / args.dimensions.0;
-                            let band_bounds = (args.dimensions.0, height);
-                            let band_upper_left = mandelbrot::pixel_to_point(
-                                args.dimensions,
-                                (0, top),
-                                upper_left,
-                                lower_right,
-                            );
-                            let band_lower_right = mandelbrot::pixel_to_point(
-                                args.dimensions,
-                                (args.dimensions.0, top + height),
-                                upper_left,
-                                lower_right,
-                            );
+            canvas.render(
+                band,
+                band_bounds,
+                band_upper_left,
+                band_lower_right,
+                args.limit,
+                args.invert,
+            );
+        });
+        // let threads = 16;
+        // let rows_per_band = args.dimensions.1 / threads + 1;
 
-                            let plotter = mandelbrot::get_plotting_algorithm(&args.algorithm);
-                            let canvas = Canvas::new(plotter);
+        // let bands = Mutex::new(pixels.chunks_mut(rows_per_band * args.dimensions.0).enumerate());
 
-                            canvas.render(
-                                band,
-                                band_bounds,
-                                band_upper_left,
-                                band_lower_right,
-                                args.limit,
-                                args.invert,
-                            );
-                        }
-                    }
-                });
-            }
-        })
-        .unwrap();
+        // // Spawn workers and have them pull bands to work on until finished.
+        // crossbeam::scope(|spawner| {
+        //     for _ in 0..threads {
+        //         spawner.spawn(|_| loop {
+        //             match {
+        //                 let mut guard = bands.lock().unwrap();
+        //                 guard.next()
+        //             } {
+        //                 None => {
+        //                     return;
+        //                 }
+        //                 Some((i, band)) => {
+        //                     let top = rows_per_band * i;
+        //                     let height = band.len() / args.dimensions.0;
+        //                     let band_bounds = (args.dimensions.0, height);
+        //                     let band_upper_left = mandelbrot::pixel_to_point(
+        //                         args.dimensions,
+        //                         (0, top),
+        //                         upper_left,
+        //                         lower_right,
+        //                     );
+        //                     let band_lower_right = mandelbrot::pixel_to_point(
+        //                         args.dimensions,
+        //                         (args.dimensions.0, top + height),
+        //                         upper_left,
+        //                         lower_right,
+        //                     );
+
+        //                     let plotter = mandelbrot::get_plotting_algorithm(&args.algorithm);
+        //                     let canvas = Canvas::new(plotter);
+
+        //                     canvas.render(
+        //                         band,
+        //                         band_bounds,
+        //                         band_upper_left,
+        //                         band_lower_right,
+        //                         args.limit,
+        //                         args.invert,
+        //                     );
+        //                 }
+        //             }
+        //         });
+        //     }
+        // })
+        // .unwrap();
 
         write_image(&args.output, &pixels, args.dimensions).expect("error writing PNG file");
     }
