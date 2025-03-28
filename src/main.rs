@@ -1,23 +1,21 @@
-use clap::builder::PossibleValuesParser;
 mod mandelbrot;
 mod parsers;
 mod algorithms;
 use mandelbrot::Canvas;
-use parsers::parse_pair;
+mod cli;
+use cli::Arguments;
 
 // #[macro_use]
 extern crate clap;
+use clap::Parser;
 
 #[cfg(feature = "gpu")]
 extern crate ocl;
-
 #[cfg(feature = "gpu")]
 mod gpu;
-
 #[cfg(feature = "gpu")]
 use gpu::gpu_render;
 
-use clap::Parser;
 use image::png::PNGEncoder;
 use image::ColorType;
 
@@ -36,54 +34,7 @@ fn write_image(
     Ok(())
 }
 
-#[derive(Debug, Parser)]
-#[command(author, version, about, long_about = None)]
-struct Arguments {
-    #[arg(short, long)]
-    zoom: f64,
 
-    #[arg(short, long, default_value = "mandelbrot.png")]
-    output: String,
-
-    #[arg(
-        short, 
-        long, 
-        default_value = "escape_time",
-        value_parser = PossibleValuesParser::new(["escape_time", "burning_ship"])
-    )]
-    algorithm: String,
-
-    #[arg(
-        short,
-        long,
-        allow_hyphen_values = true,
-        value_parser = |arg: &str| match parse_pair::<f64>(arg, ',') {
-            Some(v) => Ok(v),
-            None => Err("error parsing center point".to_string())
-        }
-    )]
-    center: (f64, f64),
-
-    #[arg(
-        short,
-        long,
-        default_value = "1920x1080",
-        value_parser = |arg: &str| match parse_pair::<usize>(arg, 'x') {
-            Some(v) => Ok(v),
-            None => Err("error parsing image dimensions".to_string())
-        }
-    )]
-    dimensions: (usize, usize),
-
-    #[arg(short, long)]
-    gpu: bool,
-
-    #[arg(short, long)]
-    limit: usize,
-
-    #[arg(short, long)]
-    invert: bool,
-}
 
 fn main() {
     let args = Arguments::parse();
