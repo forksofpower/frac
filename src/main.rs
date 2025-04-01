@@ -4,6 +4,7 @@ mod algorithms;
 use mandelbrot::Canvas;
 mod cli;
 use cli::Arguments;
+mod types;
 
 // #[macro_use]
 extern crate clap;
